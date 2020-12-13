@@ -1,0 +1,120 @@
+AWSTemplateFormatVersion: 2010-09-09
+Resources:
+
+  jobsDb:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: jobId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: jobId
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+
+  lambdaBasicPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      Roles:
+        - !Ref lambdaRole
+      PolicyDocument: 
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: 'logs:CreateLogGroup'
+            Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*'
+          - Effect: Allow
+            Action:
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+            Resource:
+              - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${lambdaFunction}:*'
+
+  lambdaDbPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      Roles:
+        - !Ref lambdaRole
+      PolicyDocument: 
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'dynamodb:DeleteItem'
+              - 'dynamodb:GetItem'
+              - 'dynamodb:PutItem'
+              - 'dynamodb:Scan'
+              - 'dynamodb:UpdateItem'
+            Resource: !GetAtt jobsDb.Arn
+
+  lambdaRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument: 
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+
+  lambdaFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Handler: index.lambda_handler
+      Role: !GetAtt lambdaRole.Arn
+      Runtime: python3.7
+      Code:
+        ZipFile: !Sub
+          - |
+            import boto3,time
+            
+            def lambda_handler(event, context):
+                r=500
+            
+                try:
+                    jobId=event['detail']['jobArn']
+                    logStreamName=event['detail']['container']['logStreamName']
+                    c=boto3.client('dynamodb')
+                    r=c.put_item(TableName='${V_Table}',Item={'jobId':{'S':jobId},'logStreamName':{'S':logStreamName},'timeStamp':{'N':time.time()}})['ResponseMetadata']['HTTPStatusCode']
+                    del(c)
+                except Exception as exc:
+                    print('*** Exception occurred --- type: {} args: {}'.format(type(exc),exc.args))
+            
+                return {
+                    'statusCode': r,
+                }
+          - V_Table: !Ref jobsDb
+
+  invokeLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref lambdaFunction
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt batchEvent.Arn
+
+  batchEvent:
+    Type: 'AWS::Events::Rule'
+    DependsOn: jobsDb
+    Properties:
+      EventPattern:
+        source: 
+          - "aws.batch"
+        detail-type:
+         - "Batch Job State Change" 
+        detail:
+          status: 
+            - "SUCCEEDED"
+            - "FAILED"
+      Targets:
+        - Arn: !GetAtt lambdaFunction.Arn
+          Id: lambdaTarget
+
+Outputs:
+  tableName:
+    Value: !Ref jobsDb
+    Description: Batch jobs table
+    
