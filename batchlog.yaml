@@ -1,7 +1,10 @@
 AWSTemplateFormatVersion: 2010-09-09
+Description: This template creates a CloudWatch event triggered by all AWS Batch job finish (both SUCCEDED or FAILED), writing batch jobID and logStreamName into a DynamoDB 
+
 Resources:
 
   jobsDb:
+    Description: DynamoDB table containing jobs' data
     Type: 'AWS::DynamoDB::Table'
     Properties:
       AttributeDefinitions:
@@ -15,6 +18,7 @@ Resources:
         WriteCapacityUnits: 5
 
   lambdaBasicPolicy:
+    Description: Policy containing basic privileges to run any lambda function
     Type: 'AWS::IAM::ManagedPolicy'
     Properties:
       Roles:
@@ -33,6 +37,7 @@ Resources:
               - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${lambdaFunction}:*'
 
   lambdaDbPolicy:
+    Description: Policy containing specific privileges for working on jobs table
     Type: 'AWS::IAM::ManagedPolicy'
     Properties:
       Roles:
@@ -50,6 +55,7 @@ Resources:
             Resource: !GetAtt jobsDb.Arn
 
   lambdaRole:
+    Description: Role for lambda function, implying both the above policies
     Type: 'AWS::IAM::Role'
     Properties:
       AssumeRolePolicyDocument: 
@@ -61,6 +67,7 @@ Resources:
             Action: 'sts:AssumeRole'
 
   lambdaFunction:
+    Description: Function code for writing the table based on event data
     Type: 'AWS::Lambda::Function'
     Properties:
       Handler: index.lambda_handler
@@ -89,6 +96,7 @@ Resources:
           - V_Table: !Ref jobsDb
 
   invokeLambdaPermission:
+    Description: permission necessary for CloudWatch to invoke our lambda function
     Type: AWS::Lambda::Permission
     Properties: 
       FunctionName: !Ref lambdaFunction
@@ -97,6 +105,7 @@ Resources:
       SourceArn: !GetAtt batchEvent.Arn
 
   batchEvent:
+    Description: Event rule triggering on SUCCEEDED and FAILED job state changes
     Type: 'AWS::Events::Rule'
     DependsOn: jobsDb
     Properties:
