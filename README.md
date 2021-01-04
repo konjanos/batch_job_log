@@ -23,3 +23,5 @@ Using the CloudFormation template in this repository, you can set up the above i
 - Lambda execution role for CloudWatch to be able to execute the lambda
 
 By the end of the stack creation, all you need is the DynamoDB table name which is output of the stack.
+
+![PIC](https://raw.githubusercontent.com/konjanos/batch_job_log/main/batch_log.svg)
