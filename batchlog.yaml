@@ -91,13 +91,17 @@ Resources:
                     details=event['detail']
 
                     # Retrieve instance information based on container instance ID from triggering event
-                    ecs=boto3.client('ecs')
-                    pattern=re.compile('arn:(.*?):ecs:(.+?):(.+?):container-instance/(.+?)/(.*)')
-                    match=pattern.match(details['container']['containerInstanceArn'])
-                    instance=ecs.describe_container_instances(
-                        containerInstances=[match.group(5)],
-                        cluster=match.group(4)
-                    )['containerInstances'][0]
+                    if 'FARGATE' in details['platformCapabilities']:
+                        instanceId='FARGATE'
+                    else:
+                        ecs=boto3.client('ecs')
+                        pattern=re.compile('arn:(.*?):ecs:(.+?):(.+?):container-instance/(.+?)/(.*)')
+                        match=pattern.match(details['container']['containerInstanceArn'])
+                        instance=ecs.describe_container_instances(
+                            containerInstances=[match.group(5)],
+                            cluster=match.group(4)
+                        )['containerInstances'][0]
+                        instanceId=instance['ec2InstanceId']
 
                     # Add job details to DynamoDB table
                     db=boto3.client('dynamodb')
@@ -107,12 +111,9 @@ Resources:
                             'startTime':{'N':str(details['startedAt'])},
                             'stopTime':{'N':str(details['stoppedAt'])},
                             
-                            'instanceId':{'S':instance['ec2InstanceId']}
+                            'instanceId':{'S':instanceId}
                             
                         })['ResponseMetadata']['HTTPStatusCode']
-
-                    del(db)
-                    del(ecs)
                 except Exception as exc:
                     print('*** Exception occurred --- type: {} args: {}'.format(type(exc),exc.args))
 
