@@ -90,6 +90,7 @@ Resources:
                 try:
                     details=event['detail']
 
+                    # Retrieve instance information based on container instance ID from triggering event
                     ecs=boto3.client('ecs')
                     pattern=re.compile('arn:(.*?):ecs:(.+?):(.+?):container-instance/(.+?)/(.*)')
                     match=pattern.match(details['container']['containerInstanceArn'])
@@ -98,8 +99,9 @@ Resources:
                         cluster=match.group(4)
                     )['containerInstances'][0]
 
+                    # Add job details to DynamoDB table
                     db=boto3.client('dynamodb')
-                    r=c.put_item(TableName='${V_Table}',
+                    r=db.put_item(TableName='${V_Table}',
                         Item={'jobId':{'S':details['jobArn']},
                             'logStreamName':{'S':details['container']['logStreamName']},
                             'startTime':{'N':str(details['startedAt'])},
@@ -108,7 +110,9 @@ Resources:
                             'instanceId':{'S':instance['ec2InstanceId']}
                             
                         })['ResponseMetadata']['HTTPStatusCode']
+
                     del(db)
+                    del(ecs)
                 except Exception as exc:
                     print('*** Exception occurred --- type: {} args: {}'.format(type(exc),exc.args))
 
