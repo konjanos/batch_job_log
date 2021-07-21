@@ -1,5 +1,7 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: This template creates a CloudWatch event triggered by all AWS Batch job finish (both SUCCEDED or FAILED), writing batch jobID and logStreamName into a DynamoDB 
+Description: >
+    This template creates a CloudWatch event triggered by all AWS Batch job finish (both SUCCEDED or FAILED), writing batch jobID and addtional job information into a DynamoDB table
+    Note! new ARN format for ECS must be in use for resolving cluster name and continer instance ID
 
 Resources:
 
@@ -36,8 +38,8 @@ Resources:
             Resource:
               - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${lambdaFunction}:*'
 
-  lambdaDbPolicy:
-    Description: Policy containing specific privileges for working on jobs table
+  lambdaRunPolicy:
+    Description: Policy containing specific privileges for working on jobs table and describing container instances
     Type: 'AWS::IAM::ManagedPolicy'
     Properties:
       Roles:
@@ -53,6 +55,10 @@ Resources:
               - 'dynamodb:Scan'
               - 'dynamodb:UpdateItem'
             Resource: !GetAtt jobsDb.Arn
+          - Effect: Allow
+            Action:
+              - 'ecs:DescribeContainerInstances'
+            Resource: '*'
 
   lambdaRole:
     Description: Role for lambda function, implying both the above policies
@@ -76,20 +82,36 @@ Resources:
       Code:
         ZipFile: !Sub
           - |
-            import boto3,time
-            
+            import boto3,time,re
+
             def lambda_handler(event, context):
                 r=500
-            
+
                 try:
-                    jobId=event['detail']['jobArn']
-                    logStreamName=event['detail']['container']['logStreamName']
-                    c=boto3.client('dynamodb')
-                    r=c.put_item(TableName='${V_Table}',Item={'jobId':{'S':jobId},'logStreamName':{'S':logStreamName},'timeStamp':{'N':time.time()}})['ResponseMetadata']['HTTPStatusCode']
-                    del(c)
+                    details=event['detail']
+
+                    ecs=boto3.client('ecs')
+                    pattern=re.compile('arn:(.*?):ecs:(.+?):(.+?):container-instance/(.+?)/(.*)')
+                    match=pattern.match(details['container']['containerInstanceArn'])
+                    instance=ecs.describe_container_instances(
+                        containerInstances=[match.group(5)],
+                        cluster=match.group(4)
+                    )['containerInstances'][0]
+
+                    db=boto3.client('dynamodb')
+                    r=c.put_item(TableName='${V_Table}',
+                        Item={'jobId':{'S':details['jobArn']},
+                            'logStreamName':{'S':details['container']['logStreamName']},
+                            'startTime':{'N':str(details['startedAt'])},
+                            'stopTime':{'N':str(details['stoppedAt'])},
+                            
+                            'instanceId':{'S':instance['ec2InstanceId']}
+                            
+                        })['ResponseMetadata']['HTTPStatusCode']
+                    del(db)
                 except Exception as exc:
                     print('*** Exception occurred --- type: {} args: {}'.format(type(exc),exc.args))
-            
+
                 return {
                     'statusCode': r,
                 }
