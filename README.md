@@ -14,9 +14,16 @@ Hence, it may happen to miss the opportunity to set up a relationship between yo
 
 In order to mitigate this issue, you can create a [CloudWatch event](https://docs.aws.amazon.com/batch/latest/userguide/batch_cwet.html) on batch job state change events, triggering a lambda function which will grab the required information from this event and store it into a DynamoDB table. This give you a clean, serverless solution for this problem.
 
-Using the CloudFormation template in this repository, you can set up the above inrastructure in a specific region/account, creating the following resources:
+In order to demonstrate further possibilities, the Lambda function also uses [DescribeContainerInstances API](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_DescribeContainerInstances.html) to retrieve additional information about the instance catered the job. However, DescribeContainerInstances requires the container instance ID as well as the name of the cluster it resides. The cluster name is only available from the previous event if your container instance is already using the [new ARN format](https://docs.aws.amazon.com/AmazonECS/latest/userguide/ecs-account-settings.html#ecs-resource-ids), since the old arn format is:
+```arn:aws:ecs:region:aws_account_id:container-instance/container-instance-id```
+while the new ARN format:
+```arn:aws:ecs:region:aws_account_id:container-instance/cluster-name/container-instance-id```
 
-- A DynamoDB table with the releant information about ech AWS Batch job finished. The name of this table is output of the stack
+Consequently, in case you want to describe the container instances to retrieve additional information, you need to [opt in to use the new ARN format for ECS](https://docs.aws.amazon.com/AmazonECS/latest/userguide/ecs-modifying-longer-id-settings.html) if you haven't already done so.
+
+Using the CloudFormation template in this repository, you can set up the above infrastructure in a specific region/account, creating the following resources:
+
+- A DynamoDB table with the relevant information about ech AWS Batch job finished. The name of this table is output of the stack
 - A CloudWatch event firing on batch job state change events where the even t is "SUCCEEDED" or "FAILED" (e.g. finished)
 - A Lambda function called by the CloudWatch event above, processing the event passed to it and storing useful data into the DynamoDB table
 - A role with two policies used by lambda in order to be able to run and write the DynamoDB table
