@@ -1,5 +1,5 @@
 # batch_job_log
-Logging AWS Batch job log stream names upon finish
+Logging AWS Batch job data upon finish
 
 # Logging in AWS Batch
 As it is documented in [logging section](https://docs.aws.amazon.com/batch/latest/userguide/using_awslogs.html) of AWS Batch, the default place for each job is:
