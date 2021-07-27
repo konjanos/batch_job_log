@@ -23,11 +23,16 @@ Consequently, in case you want to describe the container instances to retrieve a
 
 Using the CloudFormation template in this repository, you can set up the above infrastructure in a specific region/account, creating the following resources:
 
-- A DynamoDB table with the relevant information about ech AWS Batch job finished. The name of this table is output of the stack
-- A CloudWatch event firing on batch job state change events where the even t is "SUCCEEDED" or "FAILED" (e.g. finished)
-- A Lambda function called by the CloudWatch event above, processing the event passed to it and storing useful data into the DynamoDB table
-- A role with two policies used by lambda in order to be able to run and write the DynamoDB table
-- Lambda execution role for CloudWatch to be able to execute the lambda
+- A DynamoDB table `jobsDb` with the relevant information about ech AWS Batch job finished. The name of this table is output of the stack. The information includes:
+  - `jobId` as key field
+  - `logStreamName` containing the CloudWatch log stream name
+  - `startTime` the Epoch timestamp in 1/1000s seconds of the container start for the job
+  - `stopTime` the Epoch timestamp in 1/1000s seconds of the container stop for the job
+  - `instanceId` the EC2 instance ID hosted the ECS task for the job, or "FARGATE" in case of a Fargate job
+- A CloudWatch event rule `batchEvent` firing on batch job state change events where the even t is "SUCCEEDED" or "FAILED" (e.g. finished)
+- A Lambda function `lambdaFunction` called by the CloudWatch event above, processing the event passed to it and storing useful data into the DynamoDB table
+- A role `lambdaRole` with two policies used by lambda in order to be able to run (`lambdaBasicPolicy`) and write the DynamoDB table (`lambdaRunPolicy`)
+- Lambda execution permission `invokeLambdaPermission` for CloudWatch to be able to execute the lambda
 
 By the end of the stack creation, all you need is the DynamoDB table name which is output of the stack.
 
